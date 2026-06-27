@@ -662,13 +662,17 @@ function initBeforeAfterSlider() {
                     beforeImg.style.backgroundImage = `url('${item.beforeImg}')`;
                     afterImg.style.backgroundImage = `url('${item.afterImg}')`;
                     
-                    // Update static labels
-                    document.getElementById("slider-before-label").innerText = item.beforeLabel;
-                    document.getElementById("slider-after-label").innerText = item.afterLabel;
+                    // Update static labels safely
+                    const sliderBeforeLabel = document.getElementById("slider-before-label");
+                    const sliderAfterLabel = document.getElementById("slider-after-label");
+                    if (sliderBeforeLabel) sliderBeforeLabel.innerText = item.beforeLabel;
+                    if (sliderAfterLabel) sliderAfterLabel.innerText = item.afterLabel;
 
-                    // Update caption card below slider
-                    document.getElementById("case-study-title").innerText = item.title;
-                    document.getElementById("case-study-desc").innerText = item.description;
+                    // Update caption card below slider safely
+                    const caseStudyTitle = document.getElementById("case-study-title");
+                    const caseStudyDesc = document.getElementById("case-study-desc");
+                    if (caseStudyTitle) caseStudyTitle.innerText = item.title;
+                    if (caseStudyDesc) caseStudyDesc.innerText = item.description;
                 }
             });
         });
@@ -914,7 +918,23 @@ function initBookingWizard() {
                 setInputError(date, true);
                 isValid = false;
             } else {
-                setInputError(date, false);
+                // Parse date and check if it is Sunday (closed day)
+                const parts = date.value.split('-');
+                if (parts.length === 3) {
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10) - 1;
+                    const day = parseInt(parts[2], 10);
+                    const dateObj = new Date(year, month, day);
+                    if (dateObj.getDay() === 0) { // 0 = Sunday
+                        alert("The clinic is closed on Sundays. Please select a date from Monday to Saturday.");
+                        setInputError(date, true);
+                        isValid = false;
+                    } else {
+                        setInputError(date, false);
+                    }
+                } else {
+                    setInputError(date, false);
+                }
             }
 
             if (!time.value) {
@@ -1020,29 +1040,42 @@ function initBookingWizard() {
     function processFinalBooking(paymentStatus, transactionId = "N/A") {
         const formData = new FormData(form);
         
+        function escapeHTML(str) {
+            if (!str) return "";
+            return String(str).replace(/[&<>'"]/g, 
+                tag => ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    "'": '&#39;',
+                    '"': '&quot;'
+                }[tag] || tag)
+            );
+        }
+        
         // Compile concern options and custom textarea text
         const selectedConcerns = [];
         const checkboxes = form.querySelectorAll('input[name="concerns"]:checked');
         checkboxes.forEach(cb => {
             if (cb.value !== "Other") {
-                selectedConcerns.push(cb.value);
+                selectedConcerns.push(escapeHTML(cb.value));
             }
         });
         const customNotes = formData.get("patientNotes") || "";
         if (customNotes.trim()) {
-            selectedConcerns.push(`Custom: ${customNotes.trim()}`);
+            selectedConcerns.push(`Custom: ${escapeHTML(customNotes.trim())}`);
         }
         const compiledNotes = selectedConcerns.length > 0 ? selectedConcerns.join(", ") : "None";
 
         const data = {
-            treatment: formData.get("treatmentType"),
-            name: formData.get("patientName"),
-            phone: formData.get("patientPhone"),
-            email: formData.get("patientEmail") || "Not Provided",
-            age: formData.get("patientAge"),
-            gender: formData.get("patientGender"),
-            date: formData.get("preferredDate"),
-            time: formData.get("preferredTime"),
+            treatment: escapeHTML(formData.get("treatmentType")),
+            name: escapeHTML(formData.get("patientName")),
+            phone: escapeHTML(formData.get("patientPhone")),
+            email: escapeHTML(formData.get("patientEmail") || "Not Provided"),
+            age: escapeHTML(formData.get("patientAge")),
+            gender: escapeHTML(formData.get("patientGender")),
+            date: escapeHTML(formData.get("preferredDate")),
+            time: escapeHTML(formData.get("preferredTime")),
             notes: compiledNotes,
             payment: paymentStatus,
             txnId: transactionId
@@ -1088,7 +1121,8 @@ function initBookingWizard() {
         );
 
         const waLink = `https://wa.me/918755807777?text=${waMessage}`;
-        document.getElementById("whatsapp-booking-link").setAttribute("href", waLink);
+        const waLinkEl = document.getElementById("whatsapp-booking-link");
+        if (waLinkEl) waLinkEl.setAttribute("href", waLink);
 
         goToStep(5);
     }
@@ -1318,10 +1352,13 @@ function initFaqAccordion() {
             const panel = item.querySelector(".faq-panel");
             const isActive = item.classList.contains("active");
 
-            // Close all other panels
+            // Close all other panels safely
             document.querySelectorAll(".faq-item").forEach(otherItem => {
                 otherItem.classList.remove("active");
-                otherItem.querySelector(".faq-panel").style.maxHeight = null;
+                const otherPanel = otherItem.querySelector(".faq-panel");
+                if (otherPanel) {
+                    otherPanel.style.maxHeight = null;
+                }
             });
 
             if (!isActive) {
@@ -1402,10 +1439,16 @@ function initScrollReveal() {
         { selector: '.stat-item', revealClass: 'reveal-scale' }
     ];
 
-    // Add classes dynamically
+    // Add classes dynamically and check if already in viewport to prevent page-load flash
     revealTargets.forEach(target => {
         document.querySelectorAll(target.selector).forEach(el => {
-            el.classList.add('reveal-on-scroll', target.revealClass);
+            const rect = el.getBoundingClientRect();
+            const isInViewport = rect.top < window.innerHeight && rect.bottom > 0;
+            if (isInViewport) {
+                el.classList.add('reveal-on-scroll', target.revealClass, 'revealed');
+            } else {
+                el.classList.add('reveal-on-scroll', target.revealClass);
+            }
         });
     });
 
@@ -1751,12 +1794,18 @@ function initScrollReveal() {
             const sensitivityVal = selectedSensitivityRadio ? selectedSensitivityRadio.value : "N/A";
             const exposureVal = selectedExposureRadio ? selectedExposureRadio.value : "N/A";
 
-            // Update result text in DOM
-            document.getElementById("res-name").textContent = name;
-            document.getElementById("res-concern").textContent = concernVal;
-            document.getElementById("res-skin-type").textContent = skinTypeVal;
-            document.getElementById("res-sensitivity").textContent = sensitivityVal;
-            document.getElementById("res-exposure").textContent = exposureVal;
+            // Update result text in DOM safely
+            const resName = document.getElementById("res-name");
+            const resConcern = document.getElementById("res-concern");
+            const resSkinType = document.getElementById("res-skin-type");
+            const resSensitivity = document.getElementById("res-sensitivity");
+            const resExposure = document.getElementById("res-exposure");
+            
+            if (resName) resName.textContent = name;
+            if (resConcern) resConcern.textContent = concernVal;
+            if (resSkinType) resSkinType.textContent = skinTypeVal;
+            if (resSensitivity) resSensitivity.textContent = sensitivityVal;
+            if (resExposure) resExposure.textContent = exposureVal;
 
             // Generate report copy
             let assessmentText = "";
@@ -1797,9 +1846,11 @@ function initScrollReveal() {
                 routineTip += " Apply broad-spectrum mineral sunscreen SPF 50 daily, especially with outdoor travel.";
             }
 
-            // Fill results in DOM
-            document.getElementById("res-assessment-text").textContent = assessmentText;
-            document.getElementById("res-routine-tip").textContent = routineTip;
+            // Fill results in DOM safely
+            const resAssess = document.getElementById("res-assessment-text");
+            const resTip = document.getElementById("res-routine-tip");
+            if (resAssess) resAssess.textContent = assessmentText;
+            if (resTip) resTip.textContent = routineTip;
 
             const treatmentsList = document.getElementById("res-treatments-list");
             if (treatmentsList) {
@@ -1865,9 +1916,11 @@ function initScrollReveal() {
     // Book Appointment CTA from results card
     if (bookFromAnalysisBtn) {
         bookFromAnalysisBtn.addEventListener("click", () => {
-            // Gather result values
-            const name = document.getElementById("res-name").textContent;
-            const phone = document.getElementById("analysis-phone").value;
+            // Gather result values safely
+            const resName = document.getElementById("res-name");
+            const analysisPhone = document.getElementById("analysis-phone");
+            const name = resName ? resName.textContent : "";
+            const phone = analysisPhone ? analysisPhone.value : "";
 
             // Open booking modal
             const bookingModal = document.getElementById("booking-modal");
